@@ -16,6 +16,8 @@ npm start
 
 Open `http://localhost:4200`.
 
+API auth defaults to HTTP Basic `demo` / `demo` (see `src/environments/environment.ts`).
+
 Set API base in `src/environments/environment.ts` if needed.
 
 ## What it shows
