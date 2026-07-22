@@ -4,6 +4,10 @@ Angular admin UI for the public [inventory-api](https://github.com/ndeanka/inven
 
 **Angular 19 · standalone · signals · OnPush · typed HttpClient**
 
+## Ecosystem
+
+Works with [inventory-api](https://github.com/ndeanka/inventory-api). See also [inventory-jobs](https://github.com/ndeanka/inventory-jobs) and [sku-service](https://github.com/ndeanka/sku-service).
+
 ## Run
 
 ```bash
