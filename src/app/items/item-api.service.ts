@@ -16,4 +16,12 @@ export class ItemApiService {
   create(payload: CreateInventoryItem): Observable<InventoryItem> {
     return this.http.post<InventoryItem>(this.base, payload);
   }
+
+  update(id: string, payload: CreateInventoryItem): Observable<InventoryItem> {
+    return this.http.put<InventoryItem>(`${this.base}/${id}`, payload);
+  }
+
+  delete(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/${id}`);
+  }
 }

@@ -46,10 +46,11 @@
               <th>Name</th>
               <th>Qty</th>
               <th>Price</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            <app-table-skeleton [rows]="5" [columns]="4" />
+            <app-table-skeleton [rows]="5" [columns]="5" />
           </tbody>
         </table>
       } @else if (items().length === 0) {
@@ -62,15 +63,42 @@
               <th>Name</th>
               <th>Qty</th>
               <th>Price</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             @for (item of items(); track item.id) {
               <tr>
-                <td>{{ item.sku }}</td>
-                <td>{{ item.name }}</td>
-                <td>{{ item.quantityOnHand }}</td>
-                <td>{{ item.unitPrice | currency: 'USD' }}</td>
+                @if (editingId() === item.id) {
+                  <td><input [formControl]="editForm.controls.sku" /></td>
+                  <td><input [formControl]="editForm.controls.name" /></td>
+                  <td>
+                    <input type="number" [formControl]="editForm.controls.quantityOnHand" min="0" />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      [formControl]="editForm.controls.unitPrice"
+                      min="0"
+                      step="0.01"
+                    />
+                  </td>
+                  <td class="actions">
+                    <button type="button" (click)="saveEdit()" [disabled]="saving()">Save</button>
+                    <button type="button" class="ghost" (click)="cancelEdit()">Cancel</button>
+                  </td>
+                } @else {
+                  <td>{{ item.sku }}</td>
+                  <td>{{ item.name }}</td>
+                  <td>{{ item.quantityOnHand }}</td>
+                  <td>{{ item.unitPrice | currency: 'USD' }}</td>
+                  <td class="actions">
+                    <button type="button" class="ghost" (click)="startEdit(item)">Edit</button>
+                    <button type="button" class="ghost" (click)="confirmDelete(item.id)">
+                      Delete
+                    </button>
+                  </td>
+                }
               </tr>
             }
           </tbody>
@@ -78,4 +106,29 @@
       }
     </div>
   </div>
+
+  @if (deletingId()) {
+    <div
+      class="modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      (click)="cancelDelete()"
+      (keydown.escape)="cancelDelete()"
+    >
+      <div
+        class="modal"
+        role="document"
+        (click)="$event.stopPropagation()"
+        (keydown)="$event.stopPropagation()"
+      >
+        <h3>Confirm Delete</h3>
+        <p>Are you sure you want to delete this item?</p>
+        <div class="modal-actions">
+          <button type="button" (click)="deleteItem()">Delete</button>
+          <button type="button" class="ghost" (click)="cancelDelete()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  }
 </section>
