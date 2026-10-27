@@ -38,6 +38,14 @@
 
     <div class="panel">
       <h2>Catalog</h2>
+      <div class="search-bar">
+        <input
+          type="search"
+          placeholder="Search by SKU or name..."
+          (input)="onSearchInput($any($event.target).value)"
+          aria-label="Search items"
+        />
+      </div>
       @if (loading()) {
         <table>
           <thead>
@@ -53,21 +61,55 @@
             <app-table-skeleton [rows]="5" [columns]="5" />
           </tbody>
         </table>
-      } @else if (items().length === 0) {
-        <p class="muted">No items yet. Create one or seed via the API.</p>
+      } @else if (filteredAndSortedItems().length === 0) {
+        <p class="muted">
+          @if (searchQuery()) {
+            No items found matching "{{ searchQuery() }}".
+          } @else {
+            No items yet. Create one or seed via the API.
+          }
+        </p>
       } @else {
         <table>
           <thead>
             <tr>
-              <th>SKU</th>
-              <th>Name</th>
-              <th>Qty</th>
-              <th>Price</th>
+              <th class="sortable" (click)="toggleSort('sku')">
+                SKU
+                @if (sortColumn() === 'sku') {
+                  <span class="sort-indicator">{{
+                    sortDirection() === 'asc' ? '↑' : '↓'
+                  }}</span>
+                }
+              </th>
+              <th class="sortable" (click)="toggleSort('name')">
+                Name
+                @if (sortColumn() === 'name') {
+                  <span class="sort-indicator">{{
+                    sortDirection() === 'asc' ? '↑' : '↓'
+                  }}</span>
+                }
+              </th>
+              <th class="sortable" (click)="toggleSort('quantityOnHand')">
+                Qty
+                @if (sortColumn() === 'quantityOnHand') {
+                  <span class="sort-indicator">{{
+                    sortDirection() === 'asc' ? '↑' : '↓'
+                  }}</span>
+                }
+              </th>
+              <th class="sortable" (click)="toggleSort('unitPrice')">
+                Price
+                @if (sortColumn() === 'unitPrice') {
+                  <span class="sort-indicator">{{
+                    sortDirection() === 'asc' ? '↑' : '↓'
+                  }}</span>
+                }
+              </th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            @for (item of items(); track item.id) {
+            @for (item of filteredAndSortedItems(); track item.id) {
               <tr>
                 @if (editingId() === item.id) {
                   <td><input [formControl]="editForm.controls.sku" /></td>

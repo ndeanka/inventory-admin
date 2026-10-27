@@ -116,6 +116,30 @@ td {
   margin-bottom: 1rem;
 }
 
+.search-bar {
+  margin-bottom: 1rem;
+
+  input {
+    width: 100%;
+    max-width: 400px;
+  }
+}
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  .sort-indicator {
+    margin-left: 0.25rem;
+    font-size: 0.9em;
+  }
+}
+
 .actions {
   white-space: nowrap;
 

@@ -3,12 +3,15 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  computed,
   inject,
   OnInit,
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Subject } from 'rxjs';
+import { debounceTime } from 'rxjs/operators';
 import { TableSkeletonComponent } from '../shared/components/table-skeleton.component';
 import { ItemApiService } from './item-api.service';
 import { InventoryItem } from './item.model';
@@ -32,6 +35,37 @@ export class ItemsPageComponent implements OnInit {
   readonly saving = signal(false);
   readonly editingId = signal<string | null>(null);
   readonly deletingId = signal<string | null>(null);
+  readonly searchQuery = signal('');
+  readonly sortColumn = signal<keyof InventoryItem | null>(null);
+  readonly sortDirection = signal<'asc' | 'desc'>('asc');
+
+  private readonly searchSubject = new Subject<string>();
+
+  readonly filteredAndSortedItems = computed(() => {
+    let result = this.items();
+    const query = this.searchQuery().toLowerCase();
+
+    if (query) {
+      result = result.filter(
+        (item) => item.sku.toLowerCase().includes(query) || item.name.toLowerCase().includes(query)
+      );
+    }
+
+    const column = this.sortColumn();
+    if (column) {
+      const direction = this.sortDirection();
+      result = [...result].sort((a, b) => {
+        const aVal = a[column];
+        const bVal = b[column];
+
+        if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return result;
+  });
 
   readonly form = this.fb.nonNullable.group({
     sku: ['', [Validators.required, Validators.maxLength(64)]],
@@ -48,7 +82,24 @@ export class ItemsPageComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.searchSubject
+      .pipe(debounceTime(300), takeUntilDestroyed(this.destroyRef))
+      .subscribe((query) => this.searchQuery.set(query));
+
     this.reload();
+  }
+
+  onSearchInput(value: string): void {
+    this.searchSubject.next(value);
+  }
+
+  toggleSort(column: keyof InventoryItem): void {
+    if (this.sortColumn() === column) {
+      this.sortDirection.set(this.sortDirection() === 'asc' ? 'desc' : 'asc');
+    } else {
+      this.sortColumn.set(column);
+      this.sortDirection.set('asc');
+    }
   }
 
   reload(): void {
