@@ -1,5 +1,13 @@
 import { CurrencyPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  inject,
+  OnInit,
+  signal,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { TableSkeletonComponent } from '../shared/components/table-skeleton.component';
 import { InventoryItem } from './item.model';
@@ -15,6 +23,7 @@ import { ItemsStore } from './items.store';
 })
 export class ItemsPageComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
+  private readonly destroyRef = inject(DestroyRef);
   readonly store = inject(ItemsStore);
 
   readonly editingId = signal<string | null>(null);
@@ -56,8 +65,12 @@ export class ItemsPageComponent implements OnInit {
       return;
     }
 
-    this.store.createItem(this.form.getRawValue());
-    this.form.reset({ sku: '', name: '', quantityOnHand: 0, unitPrice: 0 });
+    this.store
+      .createItem(this.form.getRawValue())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.form.reset({ sku: '', name: '', quantityOnHand: 0, unitPrice: 0 });
+      });
   }
 
   startEdit(item: InventoryItem): void {
@@ -81,9 +94,13 @@ export class ItemsPageComponent implements OnInit {
       return;
     }
 
-    this.store.updateItem(id, this.editForm.getRawValue());
-    this.editingId.set(null);
-    this.editForm.reset();
+    this.store
+      .updateItem(id, this.editForm.getRawValue())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.editingId.set(null);
+        this.editForm.reset();
+      });
   }
 
   confirmDelete(id: string): void {
@@ -100,7 +117,11 @@ export class ItemsPageComponent implements OnInit {
       return;
     }
 
-    this.store.deleteItem(id);
-    this.deletingId.set(null);
+    this.store
+      .deleteItem(id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.deletingId.set(null);
+      });
   }
 }

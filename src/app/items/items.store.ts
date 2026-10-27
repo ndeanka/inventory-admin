@@ -1,7 +1,8 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subject } from 'rxjs';
-import { debounceTime } from 'rxjs/operators';
+import { EMPTY, Observable, Subject } from 'rxjs';
+import { catchError, debounceTime, tap } from 'rxjs/operators';
+import { NotificationService } from '../core/services/notification.service';
 import { ItemApiService } from './item-api.service';
 import { CreateInventoryItem, InventoryItem } from './item.model';
 
@@ -18,6 +19,7 @@ interface ItemsState {
 @Injectable({ providedIn: 'root' })
 export class ItemsStore {
   private readonly api = inject(ItemApiService);
+  private readonly notifications = inject(NotificationService);
 
   private readonly state = signal<ItemsState>({
     items: [],
@@ -97,64 +99,69 @@ export class ItemsStore {
         this.updateState({ items, loading: false });
       },
       error: () => {
-        this.updateState({
-          error: 'Could not reach inventory-api. Is it running on :8080?',
-          loading: false,
-        });
+        const message = 'Could not reach inventory-api. Is it running on :8080?';
+        this.updateState({ error: message, loading: false });
+        this.notifications.error(message);
       },
     });
   }
 
-  createItem(payload: CreateInventoryItem): void {
+  createItem(payload: CreateInventoryItem): Observable<InventoryItem> {
     this.updateState({ saving: true, error: null });
-    this.api.create(payload).subscribe({
-      next: (created) => {
+    return this.api.create(payload).pipe(
+      tap((created) => {
         this.state.update((state) => ({
           ...state,
           items: [created, ...state.items],
           saving: false,
         }));
-      },
-      error: (err: { error?: { message?: string }; status?: number }) => {
-        this.updateState({
-          error: err.error?.message ?? `Create failed (${err.status ?? 'network'})`,
-          saving: false,
-        });
-      },
-    });
+        this.notifications.success(`Created ${created.sku}`);
+      }),
+      catchError((err: { error?: { message?: string }; status?: number }) => {
+        const message = err.error?.message ?? `Create failed (${err.status ?? 'network'})`;
+        this.updateState({ error: message, saving: false });
+        this.notifications.error(message);
+        return EMPTY;
+      })
+    );
   }
 
-  updateItem(id: string, payload: CreateInventoryItem): void {
+  updateItem(id: string, payload: CreateInventoryItem): Observable<InventoryItem> {
     this.updateState({ saving: true, error: null });
-    this.api.update(id, payload).subscribe({
-      next: (updated) => {
+    return this.api.update(id, payload).pipe(
+      tap((updated) => {
         this.state.update((state) => ({
           ...state,
           items: state.items.map((item) => (item.id === updated.id ? updated : item)),
           saving: false,
         }));
-      },
-      error: (err: { error?: { message?: string }; status?: number }) => {
-        this.updateState({
-          error: err.error?.message ?? 'Update failed',
-          saving: false,
-        });
-      },
-    });
+        this.notifications.success(`Updated ${updated.sku}`);
+      }),
+      catchError((err: { error?: { message?: string }; status?: number }) => {
+        const message = err.error?.message ?? 'Update failed';
+        this.updateState({ error: message, saving: false });
+        this.notifications.error(message);
+        return EMPTY;
+      })
+    );
   }
 
-  deleteItem(id: string): void {
-    this.api.delete(id).subscribe({
-      next: () => {
+  deleteItem(id: string): Observable<void> {
+    return this.api.delete(id).pipe(
+      tap(() => {
         this.state.update((state) => ({
           ...state,
           items: state.items.filter((item) => item.id !== id),
         }));
-      },
-      error: () => {
-        this.updateState({ error: 'Delete failed' });
-      },
-    });
+        this.notifications.success('Item deleted');
+      }),
+      catchError(() => {
+        const message = 'Delete failed';
+        this.updateState({ error: message });
+        this.notifications.error(message);
+        return EMPTY;
+      })
+    );
   }
 
   clearError(): void {
