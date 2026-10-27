@@ -1,20 +1,9 @@
 import { CurrencyPipe } from '@angular/common';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  computed,
-  inject,
-  OnInit,
-  signal,
-} from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Subject } from 'rxjs';
-import { debounceTime } from 'rxjs/operators';
 import { TableSkeletonComponent } from '../shared/components/table-skeleton.component';
-import { ItemApiService } from './item-api.service';
 import { InventoryItem } from './item.model';
+import { ItemsStore } from './items.store';
 
 @Component({
   selector: 'app-items-page',
@@ -25,47 +14,11 @@ import { InventoryItem } from './item.model';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ItemsPageComponent implements OnInit {
-  private readonly api = inject(ItemApiService);
   private readonly fb = inject(FormBuilder);
-  private readonly destroyRef = inject(DestroyRef);
+  readonly store = inject(ItemsStore);
 
-  readonly items = signal<InventoryItem[]>([]);
-  readonly loading = signal(false);
-  readonly error = signal<string | null>(null);
-  readonly saving = signal(false);
   readonly editingId = signal<string | null>(null);
   readonly deletingId = signal<string | null>(null);
-  readonly searchQuery = signal('');
-  readonly sortColumn = signal<keyof InventoryItem | null>(null);
-  readonly sortDirection = signal<'asc' | 'desc'>('asc');
-
-  private readonly searchSubject = new Subject<string>();
-
-  readonly filteredAndSortedItems = computed(() => {
-    let result = this.items();
-    const query = this.searchQuery().toLowerCase();
-
-    if (query) {
-      result = result.filter(
-        (item) => item.sku.toLowerCase().includes(query) || item.name.toLowerCase().includes(query)
-      );
-    }
-
-    const column = this.sortColumn();
-    if (column) {
-      const direction = this.sortDirection();
-      result = [...result].sort((a, b) => {
-        const aVal = a[column];
-        const bVal = b[column];
-
-        if (aVal < bVal) return direction === 'asc' ? -1 : 1;
-        if (aVal > bVal) return direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-
-    return result;
-  });
 
   readonly form = this.fb.nonNullable.group({
     sku: ['', [Validators.required, Validators.maxLength(64)]],
@@ -82,42 +35,19 @@ export class ItemsPageComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.searchSubject
-      .pipe(debounceTime(300), takeUntilDestroyed(this.destroyRef))
-      .subscribe((query) => this.searchQuery.set(query));
-
-    this.reload();
+    this.store.loadItems();
   }
 
   onSearchInput(value: string): void {
-    this.searchSubject.next(value);
+    this.store.setSearchQuery(value);
   }
 
   toggleSort(column: keyof InventoryItem): void {
-    if (this.sortColumn() === column) {
-      this.sortDirection.set(this.sortDirection() === 'asc' ? 'desc' : 'asc');
-    } else {
-      this.sortColumn.set(column);
-      this.sortDirection.set('asc');
-    }
+    this.store.toggleSort(column);
   }
 
   reload(): void {
-    this.loading.set(true);
-    this.error.set(null);
-    this.api
-      .list()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (rows) => {
-          this.items.set(rows);
-          this.loading.set(false);
-        },
-        error: () => {
-          this.error.set('Could not reach inventory-api. Is it running on :8080?');
-          this.loading.set(false);
-        },
-      });
+    this.store.loadItems();
   }
 
   submit(): void {
@@ -125,22 +55,9 @@ export class ItemsPageComponent implements OnInit {
       this.form.markAllAsTouched();
       return;
     }
-    this.saving.set(true);
-    this.error.set(null);
-    this.api
-      .create(this.form.getRawValue())
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (created) => {
-          this.items.update((rows) => [created, ...rows]);
-          this.form.reset({ sku: '', name: '', quantityOnHand: 0, unitPrice: 0 });
-          this.saving.set(false);
-        },
-        error: (err: { error?: { message?: string }; status?: number }) => {
-          this.error.set(err.error?.message ?? `Create failed (${err.status ?? 'network'})`);
-          this.saving.set(false);
-        },
-      });
+
+    this.store.createItem(this.form.getRawValue());
+    this.form.reset({ sku: '', name: '', quantityOnHand: 0, unitPrice: 0 });
   }
 
   startEdit(item: InventoryItem): void {
@@ -164,26 +81,9 @@ export class ItemsPageComponent implements OnInit {
       return;
     }
 
-    this.saving.set(true);
-    this.error.set(null);
-
-    this.api
-      .update(id, this.editForm.getRawValue())
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (updated) => {
-          this.items.update((rows) =>
-            rows.map((item) => (item.id === updated.id ? updated : item))
-          );
-          this.editingId.set(null);
-          this.editForm.reset();
-          this.saving.set(false);
-        },
-        error: (err: { error?: { message?: string }; status?: number }) => {
-          this.error.set(err.error?.message ?? 'Update failed');
-          this.saving.set(false);
-        },
-      });
+    this.store.updateItem(id, this.editForm.getRawValue());
+    this.editingId.set(null);
+    this.editForm.reset();
   }
 
   confirmDelete(id: string): void {
@@ -200,18 +100,7 @@ export class ItemsPageComponent implements OnInit {
       return;
     }
 
-    this.api
-      .delete(id)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: () => {
-          this.items.update((rows) => rows.filter((item) => item.id !== id));
-          this.deletingId.set(null);
-        },
-        error: () => {
-          this.error.set('Delete failed');
-          this.deletingId.set(null);
-        },
-      });
+    this.store.deleteItem(id);
+    this.deletingId.set(null);
   }
 }

@@ -5,11 +5,13 @@
       <h1>Stock desk</h1>
       <p class="lede">Angular UI against the public inventory-api showcase.</p>
     </div>
-    <button type="button" class="ghost" (click)="reload()" [disabled]="loading()">Refresh</button>
+    <button type="button" class="ghost" (click)="reload()" [disabled]="store.loading()">
+      Refresh
+    </button>
   </header>
 
-  @if (error()) {
-    <p class="banner" role="alert">{{ error() }}</p>
+  @if (store.error()) {
+    <p class="banner" role="alert">{{ store.error() }}</p>
   }
 
   <div class="layout">
@@ -31,8 +33,8 @@
         Unit price
         <input type="number" formControlName="unitPrice" min="0" step="0.01" />
       </label>
-      <button type="submit" [disabled]="saving() || form.invalid">
-        {{ saving() ? 'Saving…' : 'Create' }}
+      <button type="submit" [disabled]="store.saving() || form.invalid">
+        {{ store.saving() ? 'Saving…' : 'Create' }}
       </button>
     </form>
 
@@ -46,7 +48,7 @@
           aria-label="Search items"
         />
       </div>
-      @if (loading()) {
+      @if (store.loading()) {
         <table>
           <thead>
             <tr>
@@ -61,10 +63,10 @@
             <app-table-skeleton [rows]="5" [columns]="5" />
           </tbody>
         </table>
-      } @else if (filteredAndSortedItems().length === 0) {
+      } @else if (store.filteredAndSortedItems().length === 0) {
         <p class="muted">
-          @if (searchQuery()) {
-            No items found matching "{{ searchQuery() }}".
+          @if (store.searchQuery()) {
+            No items found matching "{{ store.searchQuery() }}".
           } @else {
             No items yet. Create one or seed via the API.
           }
@@ -75,33 +77,33 @@
             <tr>
               <th class="sortable" (click)="toggleSort('sku')">
                 SKU
-                @if (sortColumn() === 'sku') {
+                @if (store.sortColumn() === 'sku') {
                   <span class="sort-indicator">{{
-                    sortDirection() === 'asc' ? '↑' : '↓'
+                    store.sortDirection() === 'asc' ? '↑' : '↓'
                   }}</span>
                 }
               </th>
               <th class="sortable" (click)="toggleSort('name')">
                 Name
-                @if (sortColumn() === 'name') {
+                @if (store.sortColumn() === 'name') {
                   <span class="sort-indicator">{{
-                    sortDirection() === 'asc' ? '↑' : '↓'
+                    store.sortDirection() === 'asc' ? '↑' : '↓'
                   }}</span>
                 }
               </th>
               <th class="sortable" (click)="toggleSort('quantityOnHand')">
                 Qty
-                @if (sortColumn() === 'quantityOnHand') {
+                @if (store.sortColumn() === 'quantityOnHand') {
                   <span class="sort-indicator">{{
-                    sortDirection() === 'asc' ? '↑' : '↓'
+                    store.sortDirection() === 'asc' ? '↑' : '↓'
                   }}</span>
                 }
               </th>
               <th class="sortable" (click)="toggleSort('unitPrice')">
                 Price
-                @if (sortColumn() === 'unitPrice') {
+                @if (store.sortColumn() === 'unitPrice') {
                   <span class="sort-indicator">{{
-                    sortDirection() === 'asc' ? '↑' : '↓'
+                    store.sortDirection() === 'asc' ? '↑' : '↓'
                   }}</span>
                 }
               </th>
@@ -109,7 +111,7 @@
             </tr>
           </thead>
           <tbody>
-            @for (item of filteredAndSortedItems(); track item.id) {
+            @for (item of store.filteredAndSortedItems(); track item.id) {
               <tr>
                 @if (editingId() === item.id) {
                   <td><input [formControl]="editForm.controls.sku" /></td>
@@ -126,7 +128,9 @@
                     />
                   </td>
                   <td class="actions">
-                    <button type="button" (click)="saveEdit()" [disabled]="saving()">Save</button>
+                    <button type="button" (click)="saveEdit()" [disabled]="store.saving()">
+                      Save
+                    </button>
                     <button type="button" class="ghost" (click)="cancelEdit()">Cancel</button>
                   </td>
                 } @else {
