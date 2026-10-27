@@ -5,11 +5,13 @@
       <h1>Stock desk</h1>
       <p class="lede">Angular UI against the public inventory-api showcase.</p>
     </div>
-    <button type="button" class="ghost" (click)="reload()" [disabled]="loading()">Refresh</button>
+    <button type="button" class="ghost" (click)="reload()" [disabled]="store.loading()">
+      Refresh
+    </button>
   </header>
 
-  @if (error()) {
-    <p class="banner" role="alert">{{ error() }}</p>
+  @if (store.error()) {
+    <p class="banner" role="alert">{{ store.error() }}</p>
   }
 
   <div class="layout">
@@ -31,18 +33,22 @@
         Unit price
         <input type="number" formControlName="unitPrice" min="0" step="0.01" />
       </label>
-      <button type="submit" [disabled]="saving() || form.invalid">
-        {{ saving() ? 'Saving…' : 'Create' }}
+      <button type="submit" [disabled]="store.saving() || form.invalid">
+        {{ store.saving() ? 'Saving…' : 'Create' }}
       </button>
     </form>
 
     <div class="panel">
       <h2>Catalog</h2>
-      @if (loading()) {
-        <p class="muted">Loading…</p>
-      } @else if (items().length === 0) {
-        <p class="muted">No items yet. Create one or seed via the API.</p>
-      } @else {
+      <div class="search-bar">
+        <input
+          type="search"
+          placeholder="Search by SKU or name..."
+          (input)="onSearchInput($any($event.target).value)"
+          aria-label="Search items"
+        />
+      </div>
+      @if (store.loading()) {
         <table>
           <thead>
             <tr>
@@ -50,15 +56,95 @@
               <th>Name</th>
               <th>Qty</th>
               <th>Price</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            @for (item of items(); track item.id) {
+            <app-table-skeleton [rows]="5" [columns]="5" />
+          </tbody>
+        </table>
+      } @else if (store.filteredAndSortedItems().length === 0) {
+        <p class="muted">
+          @if (store.searchQuery()) {
+            No items found matching "{{ store.searchQuery() }}".
+          } @else {
+            No items yet. Create one or seed via the API.
+          }
+        </p>
+      } @else {
+        <table>
+          <thead>
+            <tr>
+              <th class="sortable" (click)="toggleSort('sku')">
+                SKU
+                @if (store.sortColumn() === 'sku') {
+                  <span class="sort-indicator">{{
+                    store.sortDirection() === 'asc' ? '↑' : '↓'
+                  }}</span>
+                }
+              </th>
+              <th class="sortable" (click)="toggleSort('name')">
+                Name
+                @if (store.sortColumn() === 'name') {
+                  <span class="sort-indicator">{{
+                    store.sortDirection() === 'asc' ? '↑' : '↓'
+                  }}</span>
+                }
+              </th>
+              <th class="sortable" (click)="toggleSort('quantityOnHand')">
+                Qty
+                @if (store.sortColumn() === 'quantityOnHand') {
+                  <span class="sort-indicator">{{
+                    store.sortDirection() === 'asc' ? '↑' : '↓'
+                  }}</span>
+                }
+              </th>
+              <th class="sortable" (click)="toggleSort('unitPrice')">
+                Price
+                @if (store.sortColumn() === 'unitPrice') {
+                  <span class="sort-indicator">{{
+                    store.sortDirection() === 'asc' ? '↑' : '↓'
+                  }}</span>
+                }
+              </th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of store.filteredAndSortedItems(); track item.id) {
               <tr>
-                <td>{{ item.sku }}</td>
-                <td>{{ item.name }}</td>
-                <td>{{ item.quantityOnHand }}</td>
-                <td>{{ item.unitPrice | currency: 'USD' }}</td>
+                @if (editingId() === item.id) {
+                  <td><input [formControl]="editForm.controls.sku" /></td>
+                  <td><input [formControl]="editForm.controls.name" /></td>
+                  <td>
+                    <input type="number" [formControl]="editForm.controls.quantityOnHand" min="0" />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      [formControl]="editForm.controls.unitPrice"
+                      min="0"
+                      step="0.01"
+                    />
+                  </td>
+                  <td class="actions">
+                    <button type="button" (click)="saveEdit()" [disabled]="store.saving()">
+                      Save
+                    </button>
+                    <button type="button" class="ghost" (click)="cancelEdit()">Cancel</button>
+                  </td>
+                } @else {
+                  <td>{{ item.sku }}</td>
+                  <td>{{ item.name }}</td>
+                  <td>{{ item.quantityOnHand }}</td>
+                  <td>{{ item.unitPrice | currency: 'USD' }}</td>
+                  <td class="actions">
+                    <button type="button" class="ghost" (click)="startEdit(item)">Edit</button>
+                    <button type="button" class="ghost" (click)="confirmDelete(item.id)">
+                      Delete
+                    </button>
+                  </td>
+                }
               </tr>
             }
           </tbody>
@@ -66,4 +152,29 @@
       }
     </div>
   </div>
+
+  @if (deletingId()) {
+    <div
+      class="modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      (click)="cancelDelete()"
+      (keydown.escape)="cancelDelete()"
+    >
+      <div
+        class="modal"
+        role="document"
+        (click)="$event.stopPropagation()"
+        (keydown)="$event.stopPropagation()"
+      >
+        <h3>Confirm Delete</h3>
+        <p>Are you sure you want to delete this item?</p>
+        <div class="modal-actions">
+          <button type="button" (click)="deleteItem()">Delete</button>
+          <button type="button" class="ghost" (click)="cancelDelete()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  }
 </section>
