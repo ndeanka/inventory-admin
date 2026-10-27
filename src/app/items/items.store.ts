@@ -14,6 +14,8 @@ interface ItemsState {
   searchQuery: string;
   sortColumn: keyof InventoryItem | null;
   sortDirection: 'asc' | 'desc';
+  page: number;
+  pageSize: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -29,6 +31,8 @@ export class ItemsStore {
     searchQuery: '',
     sortColumn: null,
     sortDirection: 'asc',
+    page: 1,
+    pageSize: 10,
   });
 
   private readonly searchSubject = new Subject<string>();
@@ -40,6 +44,7 @@ export class ItemsStore {
   readonly searchQuery = computed(() => this.state().searchQuery);
   readonly sortColumn = computed(() => this.state().sortColumn);
   readonly sortDirection = computed(() => this.state().sortDirection);
+  readonly pageSize = computed(() => this.state().pageSize);
 
   readonly filteredAndSortedItems = computed(() => {
     let result = this.items();
@@ -67,9 +72,17 @@ export class ItemsStore {
     return result;
   });
 
+  readonly totalCount = computed(() => this.filteredAndSortedItems().length);
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.totalCount() / this.pageSize())));
+  readonly currentPage = computed(() => Math.min(this.state().page, this.totalPages()));
+  readonly pagedItems = computed(() => {
+    const start = (this.currentPage() - 1) * this.pageSize();
+    return this.filteredAndSortedItems().slice(start, start + this.pageSize());
+  });
+
   constructor() {
     this.searchSubject.pipe(debounceTime(300), takeUntilDestroyed()).subscribe((query) => {
-      this.updateState({ searchQuery: query });
+      this.updateState({ searchQuery: query, page: 1 });
     });
   }
 
@@ -79,6 +92,18 @@ export class ItemsStore {
 
   setSearchQuery(query: string): void {
     this.searchSubject.next(query);
+  }
+
+  setPage(page: number): void {
+    const next = Math.min(Math.max(1, Math.trunc(page)), this.totalPages());
+    this.updateState({ page: next });
+  }
+
+  setPageSize(pageSize: number): void {
+    if (!Number.isFinite(pageSize) || pageSize < 1) {
+      return;
+    }
+    this.updateState({ pageSize: Math.trunc(pageSize), page: 1 });
   }
 
   toggleSort(column: keyof InventoryItem): void {
@@ -114,6 +139,7 @@ export class ItemsStore {
           ...state,
           items: [created, ...state.items],
           saving: false,
+          page: 1,
         }));
         this.notifications.success(`Created ${created.sku}`);
       }),

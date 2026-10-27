@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { PaginationComponent } from '../shared/components/pagination.component';
 import { TableSkeletonComponent } from '../shared/components/table-skeleton.component';
 import { InventoryItem } from './item.model';
 import { ItemsStore } from './items.store';
@@ -16,7 +17,7 @@ import { ItemsStore } from './items.store';
 @Component({
   selector: 'app-items-page',
   standalone: true,
-  imports: [ReactiveFormsModule, CurrencyPipe, TableSkeletonComponent],
+  imports: [ReactiveFormsModule, CurrencyPipe, TableSkeletonComponent, PaginationComponent],
   templateUrl: './items-page.component.html',
   styleUrl: './items-page.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -53,6 +54,14 @@ export class ItemsPageComponent implements OnInit {
 
   toggleSort(column: keyof InventoryItem): void {
     this.store.toggleSort(column);
+  }
+
+  setPage(page: number): void {
+    this.store.setPage(page);
+  }
+
+  setPageSize(pageSize: number): void {
+    this.store.setPageSize(pageSize);
   }
 
   reload(): void {
