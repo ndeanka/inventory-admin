@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { CreateInventoryItem, InventoryItem } from './item.model';
+import { CreateInventoryItem, InventoryItem, UpdateInventoryItem } from './item.model';
 
 @Injectable({ providedIn: 'root' })
 export class ItemApiService {
@@ -17,7 +17,7 @@ export class ItemApiService {
     return this.http.post<InventoryItem>(this.base, payload);
   }
 
-  update(id: string, payload: CreateInventoryItem): Observable<InventoryItem> {
+  update(id: string, payload: UpdateInventoryItem): Observable<InventoryItem> {
     return this.http.put<InventoryItem>(`${this.base}/${id}`, payload);
   }
 

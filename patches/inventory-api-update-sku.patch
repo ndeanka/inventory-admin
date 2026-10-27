@@ -1,0 +1,192 @@
+From 020457683b2cc5035be83c0039022a9b2f3316e0 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Tue, 27 Oct 2026 20:27:48 +0000
+Subject: [PATCH] feat: accept SKU changes on item update
+
+PUT /api/v1/items/{id} now takes sku, trims and uppercases it, and
+returns 409 when another item already uses that SKU. Keeping the same
+SKU does not run the duplicate check.
+---
+ README.md                                     |  4 +-
+ .../java/com/ndeanka/inventory/item/Item.java |  4 ++
+ .../ndeanka/inventory/item/ItemService.java   |  5 +++
+ .../inventory/item/UpdateItemRequest.java     |  1 +
+ .../inventory/item/ItemControllerTest.java    | 26 +++++++++++
+ .../inventory/item/ItemServiceTest.java       | 45 +++++++++++++++++++
+ 6 files changed, 83 insertions(+), 2 deletions(-)
+
+diff --git a/README.md b/README.md
+index 777beac..923e179 100644
+--- a/README.md
++++ b/README.md
+@@ -45,7 +45,7 @@ All `/api/**` routes require HTTP Basic auth. Actuator health/info stay open.
+ | `GET` | `/api/v1/items` | List |
+ | `GET` | `/api/v1/items/{id}` | Cached in Redis (5m TTL) |
+ | `POST` | `/api/v1/items` | Create (`201` + `Location`) |
+-| `PUT` | `/api/v1/items/{id}` | Update + cache eviction |
++| `PUT` | `/api/v1/items/{id}` | Update SKU, name, stock, and price + cache eviction |
+ | `DELETE` | `/api/v1/items/{id}` | Delete + cache eviction |
+ 
+ ### Example
+@@ -61,7 +61,7 @@ curl -s -u demo:demo -X POST http://localhost:8080/api/v1/items \
+   }'
+ ```
+ 
+-Duplicate SKUs return `409 Conflict`. Validation failures return `400` with field details.
++Duplicate SKUs return `409 Conflict` on create and on update. The SKU is trimmed and stored in uppercase. Validation failures return `400` with field details. `quantityOnHand` is a whole number.
+ 
+ ## Layout
+ 
+diff --git a/src/main/java/com/ndeanka/inventory/item/Item.java b/src/main/java/com/ndeanka/inventory/item/Item.java
+index afddebb..f262d10 100644
+--- a/src/main/java/com/ndeanka/inventory/item/Item.java
++++ b/src/main/java/com/ndeanka/inventory/item/Item.java
+@@ -86,6 +86,10 @@ public class Item {
+     return updatedAt;
+   }
+ 
++  public void changeSku(String sku) {
++    this.sku = sku;
++  }
++
+   public void rename(String name) {
+     this.name = name;
+   }
+diff --git a/src/main/java/com/ndeanka/inventory/item/ItemService.java b/src/main/java/com/ndeanka/inventory/item/ItemService.java
+index ecd77f6..ba2c138 100644
+--- a/src/main/java/com/ndeanka/inventory/item/ItemService.java
++++ b/src/main/java/com/ndeanka/inventory/item/ItemService.java
+@@ -46,6 +46,11 @@ public class ItemService {
+   @CacheEvict(cacheNames = CACHE_ITEMS, key = "#id")
+   public ItemResponse update(UUID id, UpdateItemRequest request) {
+     Item item = require(id);
++    String sku = request.sku().trim().toUpperCase();
++    if (!sku.equals(item.getSku()) && items.existsBySku(sku)) {
++      throw new ConflictException("SKU already exists: " + sku);
++    }
++    item.changeSku(sku);
+     item.rename(request.name().trim());
+     item.adjustStock(request.quantityOnHand());
+     item.reprice(request.unitPrice());
+diff --git a/src/main/java/com/ndeanka/inventory/item/UpdateItemRequest.java b/src/main/java/com/ndeanka/inventory/item/UpdateItemRequest.java
+index b625196..640f1a2 100644
+--- a/src/main/java/com/ndeanka/inventory/item/UpdateItemRequest.java
++++ b/src/main/java/com/ndeanka/inventory/item/UpdateItemRequest.java
+@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Size;
+ import java.math.BigDecimal;
+ 
+ public record UpdateItemRequest(
++        @NotBlank @Size(max = 64) String sku,
+         @NotBlank @Size(max = 200) String name,
+         @Min(0) int quantityOnHand,
+         @NotNull @DecimalMin("0.00") BigDecimal unitPrice) {
+diff --git a/src/test/java/com/ndeanka/inventory/item/ItemControllerTest.java b/src/test/java/com/ndeanka/inventory/item/ItemControllerTest.java
+index 7d202ec..7a52e2a 100644
+--- a/src/test/java/com/ndeanka/inventory/item/ItemControllerTest.java
++++ b/src/test/java/com/ndeanka/inventory/item/ItemControllerTest.java
+@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
+ import static org.mockito.Mockito.when;
+ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+@@ -82,6 +83,31 @@ class ItemControllerTest {
+         .andExpect(jsonPath("$.name").value("Amoxicillin 500mg"));
+   }
+ 
++  @Test
++  void updateReturnsChangedSku() throws Exception {
++    UUID id = UUID.randomUUID();
++    Instant now = Instant.parse("2026-01-15T10:00:00Z");
++    when(items.update(eq(id), any()))
++        .thenReturn(new ItemResponse(id, "SKU-200", "Renamed", 4, new BigDecimal("3.00"), now, now));
++
++    mockMvc
++        .perform(
++            put("/api/v1/items/{id}", id)
++                .contentType(MediaType.APPLICATION_JSON)
++                .content(
++                    """
++                        {
++                          "sku": "SKU-200",
++                          "name": "Renamed",
++                          "quantityOnHand": 4,
++                          "unitPrice": 3.00
++                        }
++                        """))
++        .andExpect(status().isOk())
++        .andExpect(jsonPath("$.sku").value("SKU-200"))
++        .andExpect(jsonPath("$.name").value("Renamed"));
++  }
++
+   @Test
+   void duplicateSkuReturnsConflict() throws Exception {
+     when(items.create(any())).thenThrow(new ConflictException("SKU already exists: SKU-DUP"));
+diff --git a/src/test/java/com/ndeanka/inventory/item/ItemServiceTest.java b/src/test/java/com/ndeanka/inventory/item/ItemServiceTest.java
+index 1919faa..f5cd08f 100644
+--- a/src/test/java/com/ndeanka/inventory/item/ItemServiceTest.java
++++ b/src/test/java/com/ndeanka/inventory/item/ItemServiceTest.java
+@@ -3,6 +3,7 @@ package com.ndeanka.inventory.item;
+ import static org.assertj.core.api.Assertions.assertThat;
+ import static org.assertj.core.api.Assertions.assertThatThrownBy;
+ import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.Mockito.never;
+ import static org.mockito.Mockito.verify;
+ import static org.mockito.Mockito.when;
+ 
+@@ -51,6 +52,50 @@ class ItemServiceTest {
+         .isInstanceOf(ConflictException.class);
+   }
+ 
++  @Test
++  void updateChangesSkuWhenItIsFree() {
++    Item existing = new Item("SKU-100", "Name", 1, new BigDecimal("1.00"));
++    when(repository.findById(existing.getId())).thenReturn(Optional.of(existing));
++    when(repository.existsBySku("SKU-200")).thenReturn(false);
++    when(repository.save(any(Item.class))).thenAnswer(inv -> inv.getArgument(0));
++
++    ItemResponse response = service.update(
++        existing.getId(),
++        new UpdateItemRequest(" sku-200 ", "Renamed", 4, new BigDecimal("2.50")));
++
++    assertThat(response.sku()).isEqualTo("SKU-200");
++    assertThat(response.name()).isEqualTo("Renamed");
++    assertThat(response.quantityOnHand()).isEqualTo(4);
++  }
++
++  @Test
++  void updateKeepsTheSameSkuWithoutADuplicateCheck() {
++    Item existing = new Item("SKU-100", "Name", 1, new BigDecimal("1.00"));
++    when(repository.findById(existing.getId())).thenReturn(Optional.of(existing));
++    when(repository.save(any(Item.class))).thenAnswer(inv -> inv.getArgument(0));
++
++    ItemResponse response = service.update(
++        existing.getId(),
++        new UpdateItemRequest("sku-100", "Name", 1, new BigDecimal("1.00")));
++
++    assertThat(response.sku()).isEqualTo("SKU-100");
++    verify(repository, never()).existsBySku(any());
++  }
++
++  @Test
++  void updateRejectsDuplicateSku() {
++    Item existing = new Item("SKU-100", "Name", 1, new BigDecimal("1.00"));
++    when(repository.findById(existing.getId())).thenReturn(Optional.of(existing));
++    when(repository.existsBySku("SKU-200")).thenReturn(true);
++
++    assertThatThrownBy(
++        () -> service.update(
++            existing.getId(),
++            new UpdateItemRequest("SKU-200", "Name", 1, new BigDecimal("1.00"))))
++        .isInstanceOf(ConflictException.class)
++        .hasMessage("SKU already exists: SKU-200");
++  }
++
+   @Test
+   void getByIdRequiresExistingItem() {
+     when(repository.findById(any())).thenReturn(Optional.empty());
+-- 
+2.43.0
+

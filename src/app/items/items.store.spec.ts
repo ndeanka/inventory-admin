@@ -96,13 +96,33 @@ describe('ItemsStore', () => {
     expect(store.saving()).toBe(false);
   });
 
+  it('shows API field details when validation fails', () => {
+    store.createItem({ sku: 'X', name: 'X', quantityOnHand: 1.5, unitPrice: 1 }).subscribe();
+
+    http.expectOne(base).flush(
+      {
+        message: 'Validation failed',
+        details: ['quantityOnHand: must be a whole number'],
+      },
+      { status: 400, statusText: 'Bad Request' }
+    );
+
+    expect(store.error()).toBe('quantityOnHand: must be a whole number');
+    expect(notifications.notifications()[0]?.message).toBe(
+      'quantityOnHand: must be a whole number'
+    );
+  });
+
   it('replaces an item on update', () => {
     store.loadItems();
     http.expectOne(base).flush([item()]);
 
     const payload = { sku: 'SKU-1', name: 'Renamed', quantityOnHand: 8, unitPrice: 12.5 };
     store.updateItem('1', payload).subscribe();
-    http.expectOne(`${base}/1`).flush(item({ name: 'Renamed', quantityOnHand: 8 }));
+    const request = http.expectOne(`${base}/1`);
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual(payload);
+    request.flush(item({ name: 'Renamed', quantityOnHand: 8 }));
 
     expect(store.items()[0]?.name).toBe('Renamed');
     expect(store.items()[0]?.quantityOnHand).toBe(8);

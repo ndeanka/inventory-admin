@@ -3,8 +3,9 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { EMPTY, Observable, Subject } from 'rxjs';
 import { catchError, debounceTime, tap } from 'rxjs/operators';
 import { NotificationService } from '../core/services/notification.service';
+import { apiErrorMessage } from './api-error';
 import { ItemApiService } from './item-api.service';
-import { CreateInventoryItem, InventoryItem } from './item.model';
+import { CreateInventoryItem, InventoryItem, UpdateInventoryItem } from './item.model';
 
 interface ItemsState {
   items: InventoryItem[];
@@ -143,8 +144,8 @@ export class ItemsStore {
         }));
         this.notifications.success(`Created ${created.sku}`);
       }),
-      catchError((err: { error?: { message?: string }; status?: number }) => {
-        const message = err.error?.message ?? `Create failed (${err.status ?? 'network'})`;
+      catchError((err: { error?: { message?: string; details?: string[] }; status?: number }) => {
+        const message = apiErrorMessage(err, `Create failed (${err.status ?? 'network'})`);
         this.updateState({ error: message, saving: false });
         this.notifications.error(message);
         return EMPTY;
@@ -152,7 +153,7 @@ export class ItemsStore {
     );
   }
 
-  updateItem(id: string, payload: CreateInventoryItem): Observable<InventoryItem> {
+  updateItem(id: string, payload: UpdateInventoryItem): Observable<InventoryItem> {
     this.updateState({ saving: true, error: null });
     return this.api.update(id, payload).pipe(
       tap((updated) => {
@@ -163,8 +164,8 @@ export class ItemsStore {
         }));
         this.notifications.success(`Updated ${updated.sku}`);
       }),
-      catchError((err: { error?: { message?: string }; status?: number }) => {
-        const message = err.error?.message ?? 'Update failed';
+      catchError((err: { error?: { message?: string; details?: string[] }; status?: number }) => {
+        const message = apiErrorMessage(err, 'Update failed');
         this.updateState({ error: message, saving: false });
         this.notifications.error(message);
         return EMPTY;

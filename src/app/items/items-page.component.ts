@@ -9,9 +9,11 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { NotificationService } from '../core/services/notification.service';
 import { PaginationComponent } from '../shared/components/pagination.component';
 import { TableSkeletonComponent } from '../shared/components/table-skeleton.component';
 import { InventoryItem } from './item.model';
+import { wholeNumber } from './item.validators';
 import { ItemsStore } from './items.store';
 
 @Component({
@@ -25,6 +27,7 @@ import { ItemsStore } from './items.store';
 export class ItemsPageComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly notifications = inject(NotificationService);
   readonly store = inject(ItemsStore);
 
   readonly editingId = signal<string | null>(null);
@@ -33,14 +36,14 @@ export class ItemsPageComponent implements OnInit {
   readonly form = this.fb.nonNullable.group({
     sku: ['', [Validators.required, Validators.maxLength(64)]],
     name: ['', [Validators.required, Validators.maxLength(200)]],
-    quantityOnHand: [0, [Validators.required, Validators.min(0)]],
+    quantityOnHand: [0, [Validators.required, Validators.min(0), wholeNumber()]],
     unitPrice: [0, [Validators.required, Validators.min(0)]],
   });
 
   readonly editForm = this.fb.nonNullable.group({
     sku: ['', [Validators.required, Validators.maxLength(64)]],
     name: ['', [Validators.required, Validators.maxLength(200)]],
-    quantityOnHand: [0, [Validators.required, Validators.min(0)]],
+    quantityOnHand: [0, [Validators.required, Validators.min(0), wholeNumber()]],
     unitPrice: [0, [Validators.required, Validators.min(0)]],
   });
 
@@ -100,6 +103,12 @@ export class ItemsPageComponent implements OnInit {
   saveEdit(): void {
     const id = this.editingId();
     if (this.editForm.invalid || !id) {
+      this.editForm.markAllAsTouched();
+      this.notifications.error(
+        this.editForm.controls.quantityOnHand.hasError('wholeNumber')
+          ? 'Quantity must be a whole number.'
+          : 'Check the item fields before saving.'
+      );
       return;
     }
 
