@@ -39,7 +39,19 @@
     <div class="panel">
       <h2>Catalog</h2>
       @if (loading()) {
-        <p class="muted">Loading…</p>
+        <table>
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Name</th>
+              <th>Qty</th>
+              <th>Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            <app-table-skeleton [rows]="5" [columns]="4" />
+          </tbody>
+        </table>
       } @else if (items().length === 0) {
         <p class="muted">No items yet. Create one or seed via the API.</p>
       } @else {

@@ -9,13 +9,14 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { TableSkeletonComponent } from '../shared/components/table-skeleton.component';
 import { ItemApiService } from './item-api.service';
 import { InventoryItem } from './item.model';
 
 @Component({
   selector: 'app-items-page',
   standalone: true,
-  imports: [ReactiveFormsModule, CurrencyPipe],
+  imports: [ReactiveFormsModule, CurrencyPipe, TableSkeletonComponent],
   templateUrl: './items-page.component.html',
   styleUrl: './items-page.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
