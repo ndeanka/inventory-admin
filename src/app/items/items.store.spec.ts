@@ -144,4 +144,42 @@ describe('ItemsStore', () => {
     expect(store.sortDirection()).toBe('desc');
     expect(store.filteredAndSortedItems().map((row) => row.sku)).toEqual(['A', 'B']);
   }));
+
+  it('pages the filtered catalog and returns to the first page after a search', fakeAsync(() => {
+    store.loadItems();
+    http
+      .expectOne(base)
+      .flush([
+        item({ id: '1', sku: 'A', name: 'Anchor' }),
+        item({ id: '2', sku: 'B', name: 'Bolt' }),
+        item({ id: '3', sku: 'C', name: 'Cable' }),
+      ]);
+
+    store.setPageSize(1);
+    store.setPage(2);
+    expect(store.pagedItems().map((row) => row.sku)).toEqual(['B']);
+    expect(store.totalPages()).toBe(3);
+
+    store.setPage(99);
+    expect(store.currentPage()).toBe(3);
+
+    store.setSearchQuery('cable');
+    tick(300);
+    expect(store.currentPage()).toBe(1);
+    expect(store.pagedItems().map((row) => row.sku)).toEqual(['C']);
+  }));
+
+  it('shows a newly created item on the first page', () => {
+    store.loadItems();
+    http.expectOne(base).flush([item({ id: '1', sku: 'OLD' })]);
+    store.setPageSize(1);
+    store.setPage(1);
+
+    const payload = { sku: 'NEW', name: 'New item', quantityOnHand: 1, unitPrice: 3 };
+    store.createItem(payload).subscribe();
+    http.expectOne(base).flush(item({ id: '2', ...payload }));
+
+    expect(store.currentPage()).toBe(1);
+    expect(store.pagedItems()[0]?.sku).toBe('NEW');
+  });
 });
